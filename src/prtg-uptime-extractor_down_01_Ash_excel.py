@@ -89,8 +89,9 @@ def create_summary_excel(main_url_csv_path, excel_output_path, data_path):
     # Calcular las estadísticas para obtener el porcentaje y los totales
     stats = calculate_downtime_statistics(data_path)
     
-    # El downtime total es la suma de los downtimes de main_url y ash_url
-    total_downtime_seconds = stats['main_url_downtime'] + stats['ash_url_downtime']
+    print("\n📊 Valores que se escribirán en el Excel:")
+    print(f"   - Celda B2 (Porcentaje): {stats['ash_downtime_percentage']:.4f}%")
+    print(f"   - Celda B3 (Downtime Home): {stats['main_url_downtime']} segundos")
     
     # Crear el archivo Excel
     wb = Workbook()
@@ -117,7 +118,7 @@ def create_summary_excel(main_url_csv_path, excel_output_path, data_path):
     ws.merge_cells('A1:B1')
     ws['A1'].alignment = Alignment(horizontal='center')
     
-    # Fila 2 - Porcentaje general
+    # Fila 2 - Porcentaje general (downtime ASH respecto al tiempo total del sistema)
     ws['A2'] = "Uptime/Downtime (% General)"
     ws['A2'].fill = header_fill
     ws['A2'].font = header_font
@@ -129,17 +130,18 @@ def create_summary_excel(main_url_csv_path, excel_output_path, data_path):
     ws['B2'].alignment = Alignment(horizontal='center', vertical='center')
     ws['B2'].font = Font(bold=True)
     
-    # Fila 3 - Downtime total en formato hh:mm:ss
-    ws['A3'] = "Uptime/Downtime (Home+ASH hh:mm:ss)"
+    # Fila 3 - Downtime SOLO de HOME en formato hh:mm:ss
+    ws['A3'] = "Uptime/Downtime (Home hh:mm:ss)"
     ws['A3'].fill = header_fill
     ws['A3'].font = header_font
     ws['A3'].border = cell_border
     ws['A3'].alignment = Alignment(horizontal='left', vertical='center')
     
-    # Convertir segundos a formato hh:mm:ss
-    hours = total_downtime_seconds // 3600
-    minutes = (total_downtime_seconds % 3600) // 60
-    seconds = total_downtime_seconds % 60
+    # Convertir segundos de HOME a formato hh:mm:ss
+    home_downtime_seconds = stats['main_url_downtime']
+    hours = home_downtime_seconds // 3600
+    minutes = (home_downtime_seconds % 3600) // 60
+    seconds = home_downtime_seconds % 60
     time_formatted = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
     
     ws['B3'] = time_formatted
@@ -161,7 +163,7 @@ def create_summary_excel(main_url_csv_path, excel_output_path, data_path):
     ws['B8'] = str(stats['ash_url_downtime'])
     
     ws['A9'] = "Total downtime (segundos):"
-    ws['B9'] = str(total_downtime_seconds)
+    ws['B9'] = str(stats['main_url_downtime'] + stats['ash_url_downtime'])
     
     ws['A10'] = "Tiempo total sistema (segundos):"
     ws['B10'] = str(stats['total_time'])
@@ -181,7 +183,7 @@ def create_summary_excel(main_url_csv_path, excel_output_path, data_path):
     # Guardar el archivo
     wb.save(excel_output_path)
     
-    return total_downtime_seconds, time_formatted
+    return stats['main_url_downtime'], time_formatted
 
 def extract_uptime_stats(pdf_path, target_url="https://buenosaires.gob.ar/"):
     """
@@ -504,17 +506,6 @@ def process_all_pdfs(data_folder="../data", output_file="../data/uptime_report.c
             
             print(f"\n✅ Archivo CSV filtrado generado exitosamente: {filtered_output_path}")
             print(f"   Total de registros para https://buenosaires.gob.ar/: {len(main_url_results)}")
-            
-            # Calcular las estadísticas antes de crear el Excel
-            stats = calculate_downtime_statistics(data_path)
-            
-            # Crear el archivo Excel de resumen
-            excel_output_path = data_path / "resumen_downtime.xlsx"
-            total_seconds, formatted_duration = create_summary_excel(filtered_output_path, excel_output_path, data_path)
-            
-            print(f"\n✅ Archivo Excel de resumen generado exitosamente: {excel_output_path}")
-            print(f"   Downtime total (Home + ASH): {formatted_duration}")
-            print(f"   Porcentaje downtime ASH: {stats['ash_downtime_percentage']:.4f}%")
         
         # Filtrar solo los resultados de ash.buenosaires.gob.ar/
         ash_url_results = [r for r in all_results if r['url'] == "ash.buenosaires.gob.ar/"]
@@ -534,6 +525,19 @@ def process_all_pdfs(data_folder="../data", output_file="../data/uptime_report.c
             
             print(f"\n✅ Archivo CSV filtrado para ASH generado exitosamente: {ash_output_path}")
             print(f"   Total de registros para ash.buenosaires.gob.ar/: {len(ash_url_results)}")
+        
+        # Crear el archivo Excel de resumen DESPUÉS de generar todos los CSVs
+        if main_url_results or ash_url_results:
+            # Calcular las estadísticas
+            stats = calculate_downtime_statistics(data_path)
+            
+            # Crear el archivo Excel de resumen
+            excel_output_path = data_path / "resumen_downtime.xlsx"
+            total_seconds, formatted_duration = create_summary_excel(filtered_output_path, excel_output_path, data_path)
+            
+            print(f"\n✅ Archivo Excel de resumen generado exitosamente: {excel_output_path}")
+            print(f"   Downtime Home: {formatted_duration}")
+            print(f"   Porcentaje downtime ASH: {stats['ash_downtime_percentage']:.4f}%")
         
         # Calcular y mostrar las estadísticas de downtime
         if main_url_results or ash_url_results:
